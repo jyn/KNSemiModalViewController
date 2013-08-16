@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name     = 'KNSemiModalViewController'
-  s.version  = '0.1'
+  s.version  = '0.1.3'
   s.license  = 'MIT'
   s.summary  = 'UIViewController+KNSemiModal is an effort to make a replica of semi-modal view with pushed-back stacked animation found in the beautiful Park Guides by National Geographic app.'
   s.homepage = 'https://github.com/kentnguyen/KNSemiModalViewController'

@@ -11,11 +11,12 @@
 #import <Foundation/Foundation.h>
 #import <objc/runtime.h>
 
-#define DEFAULT_PRESENTED_OPACITY 0.5
+#define kSemiModalDefaultPresentedOpacity 0.5
+#define kSemiModalDefaultShadowState YES
 
 @interface UIViewController (KNSemiModalInternal)
 -(UIView*)parentTarget;
--(CAAnimationGroup*)animationGroupForward:(BOOL)_forward;
+-(CAAnimationGroup*)animationGroupForward:(BOOL)_forward withDuration:(CGFloat)duration;
 @end
 
 @implementation UIViewController (KNSemiModalInternal)
@@ -29,7 +30,7 @@
   return target.view;
 }
 
--(CAAnimationGroup*)animationGroupForward:(BOOL)_forward {
+-(CAAnimationGroup*)animationGroupForward:(BOOL)_forward withDuration:(CGFloat)duration {
   // Create animation keys, forwards and backwards
   CATransform3D t1 = CATransform3DIdentity;
   t1.m34 = 1.0/-900;
@@ -43,7 +44,7 @@
 
   CABasicAnimation *animation = [CABasicAnimation animationWithKeyPath:@"transform"];
   animation.toValue = [NSValue valueWithCATransform3D:t1];
-  animation.duration = kSemiModalAnimationDuration/2;
+  animation.duration = duration/2;
   animation.fillMode = kCAFillModeForwards;
   animation.removedOnCompletion = NO;
   [animation setTimingFunction:[CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut]];
@@ -70,7 +71,7 @@ static char PARENT_VIEW_PRESENTED_OPACITY;
 
 -(CGFloat)parentViewPresentedOpacity {
   NSNumber *_parentViewPresentedOpacity = objc_getAssociatedObject(self, &PARENT_VIEW_PRESENTED_OPACITY);
-  CGFloat result = DEFAULT_PRESENTED_OPACITY;
+  CGFloat result = kSemiModalDefaultPresentedOpacity;
   if (_parentViewPresentedOpacity != nil) {
     result = [_parentViewPresentedOpacity floatValue];
   }
@@ -82,6 +83,56 @@ static char PARENT_VIEW_PRESENTED_OPACITY;
   objc_setAssociatedObject(self, &PARENT_VIEW_PRESENTED_OPACITY, _parentViewPresentedOpacity, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
+static char SHADOW_PATH;
+
+-(UIBezierPath*)shadowPathForView:(UIView*)view {
+  UIBezierPath *path = objc_getAssociatedObject(self, &SHADOW_PATH);
+  if (path == nil) {
+    path = [UIBezierPath bezierPathWithRect:view.bounds];
+  }
+  return path;
+}
+
+-(void)setOverrideShadowPath:(UIBezierPath*)path {
+  objc_setAssociatedObject(self, &SHADOW_PATH, path, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
+static char AUTO_SHADOW_ON;
+
+-(void)setAutoShadowOn:(BOOL)isAutoShadowOn
+{
+  NSNumber *_autoShadowOn = [NSNumber numberWithBool:isAutoShadowOn];
+  objc_setAssociatedObject(self, &AUTO_SHADOW_ON, _autoShadowOn, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
+-(BOOL)isAutoShadowOn
+{
+  BOOL result = kSemiModalDefaultShadowState;
+  NSNumber *_autoShadowOn = objc_getAssociatedObject(self, &AUTO_SHADOW_ON);
+  if (_autoShadowOn != nil) {
+    result = [_autoShadowOn boolValue];
+  }
+  return result;
+}
+
+static char ANIMATION_DURATION;
+
+-(void)setOverrideAnimationDuration:(CGFloat)duration
+{
+  NSNumber *_animationDuration = [NSNumber numberWithFloat:duration];
+  objc_setAssociatedObject(self, &ANIMATION_DURATION, _animationDuration, OBJC_ASSOCIATION_RETAIN_NONATOMIC);  
+}
+
+-(CGFloat)animationDuration
+{
+  CGFloat result = kSemiModalAnimationDuration;
+  NSNumber *_animationDuration = objc_getAssociatedObject(self, &ANIMATION_DURATION);
+  if (_animationDuration != nil) {
+    result = [_animationDuration floatValue];
+  }
+  return result;  
+}
+
 -(void)presentSemiViewController:(UIViewController*)vc {
   [self presentSemiView:vc.view];
 }
@@ -91,6 +142,8 @@ static char PARENT_VIEW_PRESENTED_OPACITY;
   UIView * target = [self parentTarget];
   
   if (![target.subviews containsObject:view]) {
+    CGFloat animationDuration = self.animationDuration;
+    
     // Calulate all frames
     CGRect sf = view.frame;
     CGRect vf = target.frame;
@@ -118,24 +171,26 @@ static char PARENT_VIEW_PRESENTED_OPACITY;
     [overlay addSubview:dismissButton];
 
     // Begin overlay animation
-    [ss.layer addAnimation:[self animationGroupForward:YES] forKey:@"pushedBackAnimation"];
-    [UIView animateWithDuration:kSemiModalAnimationDuration animations:^{
+    [ss.layer addAnimation:[self animationGroupForward:YES withDuration:animationDuration] forKey:@"pushedBackAnimation"];
+    [UIView animateWithDuration:animationDuration animations:^{
       ss.alpha = self.parentViewPresentedOpacity; //0.5;
     }];
 
     // Present view animated
     view.frame = CGRectMake(0, vf.size.height, vf.size.width, sf.size.height);
     [target addSubview:view];
-    view.layer.shadowColor = [[UIColor blackColor] CGColor];
-    view.layer.shadowOffset = CGSizeMake(0, -2);
-    view.layer.shadowRadius = 5.0;
-    view.layer.shadowOpacity = 0.8;
-    view.layer.shouldRasterize = YES;
-    view.layer.rasterizationScale = [[UIScreen mainScreen] scale];
-    UIBezierPath *path = [UIBezierPath bezierPathWithRect:view.bounds];
-    view.layer.shadowPath = path.CGPath;
+    if (self.isAutoShadowOn) {
+      view.layer.shadowColor = [[UIColor blackColor] CGColor];
+      view.layer.shadowOffset = CGSizeMake(0, -2);
+      view.layer.shadowRadius = 5.0;
+      view.layer.shadowOpacity = 0.8;
+      view.layer.shouldRasterize = YES;
+      view.layer.rasterizationScale = [[UIScreen mainScreen] scale];
+      UIBezierPath *path = [self shadowPathForView:view]; //[UIBezierPath bezierPathWithRect:view.bounds];
+      view.layer.shadowPath = path.CGPath;
+    }
 
-    [UIView animateWithDuration:kSemiModalAnimationDuration animations:^{
+    [UIView animateWithDuration:animationDuration animations:^{
       view.frame = f;
     } completion:^(BOOL finished) {
       if(finished){
@@ -147,10 +202,11 @@ static char PARENT_VIEW_PRESENTED_OPACITY;
 }
 
 -(void)dismissSemiModalView {
+  CGFloat animationDuration = self.animationDuration;
   UIView * target = [self parentTarget];
   UIView * modal = [target.subviews objectAtIndex:target.subviews.count-1];
   UIView * overlay = [target.subviews objectAtIndex:target.subviews.count-2];
-  [UIView animateWithDuration:kSemiModalAnimationDuration animations:^{
+  [UIView animateWithDuration:animationDuration animations:^{
     modal.frame = CGRectMake(0, target.frame.size.height, modal.frame.size.width, modal.frame.size.height);
   } completion:^(BOOL finished) {
     [overlay removeFromSuperview];
@@ -159,8 +215,8 @@ static char PARENT_VIEW_PRESENTED_OPACITY;
 
   // Begin overlay animation
   UIImageView * ss = (UIImageView*)[overlay.subviews objectAtIndex:0];
-  [ss.layer addAnimation:[self animationGroupForward:NO] forKey:@"bringForwardAnimation"];
-  [UIView animateWithDuration:kSemiModalAnimationDuration animations:^{
+  [ss.layer addAnimation:[self animationGroupForward:NO withDuration:animationDuration] forKey:@"bringForwardAnimation"];
+  [UIView animateWithDuration:animationDuration animations:^{
     ss.alpha = 1;
   } completion:^(BOOL finished) {
     if(finished){
@@ -171,6 +227,7 @@ static char PARENT_VIEW_PRESENTED_OPACITY;
 }
 
 - (void)resizeSemiView:(CGSize)newSize {
+  CGFloat animationDuration = self.animationDuration;
   UIView * target = [self parentTarget];
   UIView * modal = [target.subviews objectAtIndex:target.subviews.count-1];
   CGRect mf = modal.frame;
@@ -181,7 +238,7 @@ static char PARENT_VIEW_PRESENTED_OPACITY;
   UIButton * button = [[overlay subviews] objectAtIndex:1];
   CGRect bf = button.frame;
   bf.size.height = overlay.frame.size.height - newSize.height;
-  [UIView animateWithDuration:kSemiModalAnimationDuration animations:^{
+  [UIView animateWithDuration:animationDuration animations:^{
     modal.frame = mf;
     button.frame = bf;
   } completion:^(BOOL finished) {

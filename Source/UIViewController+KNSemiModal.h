@@ -17,6 +17,16 @@
 -(CGFloat)parentViewPresentedOpacity;
 -(void)setParentViewPresentedOpacity:(CGFloat)opacity;
 
+//  Used to set a Bezier path for the shadow region. Typically, this defaults to
+//  the view's bounds.
+-(void)setOverrideShadowPath:(UIBezierPath*)path;
+
+//  Used to turn off auto shadowing.
+-(void)setAutoShadowOn:(BOOL)isAutoShadowOn;
+
+//  Used to override the default animation duration of 0.5
+-(void)setOverrideAnimationDuration:(CGFloat)duration;
+
 -(void)presentSemiViewController:(UIViewController*)vc;
 -(void)presentSemiView:(UIView*)vc;
 -(void)dismissSemiModalView;
